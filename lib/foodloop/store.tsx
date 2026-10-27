@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createSeedState } from './mock-data'
+import { getPlace } from './places'
 import type { Donation, DonationStatus, Requirement, Review, User } from './types'
 import { findBestMatch, uid } from './utils'
 
@@ -20,20 +21,20 @@ export interface FoodLoopState {
   requirements: Requirement[]
   reviews: Review[]
   currentUserId: string | null
+  sessionRestored: boolean
+  donationLoadError: string | null
   now: number
 }
 
-export type NewDonation = Omit<
-  Donation,
-  'id' | 'status' | 'createdAt' | 'history' | 'declinedRequirementIds'
->
 export type NewRequirement = Omit<Requirement, 'id' | 'status' | 'createdAt'>
 
 type Action =
   | { type: 'LOGIN'; userId: string }
   | { type: 'LOGOUT' }
+  | { type: 'RESTORE_SESSION'; userId: string | null }
   | { type: 'TICK'; now: number }
-  | { type: 'ADD_DONATION'; donation: NewDonation }
+  | { type: 'SYNC_DONATIONS'; donations: Donation[] }
+  | { type: 'DONATION_LOAD_ERROR'; message: string }
   | { type: 'DELETE_DONATION'; donationId: string }
   | { type: 'APPROVE'; donationId: string }
   | { type: 'REJECT'; donationId: string; reason: string }
@@ -74,21 +75,27 @@ function reducer(state: FoodLoopState, action: Action): FoodLoopState {
       return { ...state, currentUserId: action.userId }
     case 'LOGOUT':
       return { ...state, currentUserId: null }
+    case 'RESTORE_SESSION':
+      return {
+        ...state,
+        currentUserId: state.users.some((user) => user.id === action.userId) ? action.userId : null,
+        sessionRestored: true,
+      }
     case 'TICK':
       return { ...state, now: action.now }
 
-    case 'ADD_DONATION': {
-      const createdAt = new Date(state.now).toISOString()
-      const donation: Donation = {
-        ...action.donation,
-        id: uid('d'),
-        status: 'posted',
-        createdAt,
-        history: [{ status: 'posted', at: createdAt }],
-        declinedRequirementIds: [],
+    case 'SYNC_DONATIONS': {
+      const syncedById = new Map(action.donations.map((donation) => [donation.id, donation]))
+      const localDonations = state.donations.filter((donation) => !syncedById.has(donation.id))
+      return {
+        ...state,
+        donations: [...action.donations, ...localDonations],
+        donationLoadError: null,
       }
-      return { ...state, donations: [donation, ...state.donations] }
     }
+
+    case 'DONATION_LOAD_ERROR':
+      return { ...state, donationLoadError: action.message }
 
     case 'DELETE_DONATION':
       return {
@@ -217,7 +224,13 @@ function reducer(state: FoodLoopState, action: Action): FoodLoopState {
 
 function init(): FoodLoopState {
   const now = Date.now()
-  return { ...createSeedState(now), currentUserId: null, now }
+  return {
+    ...createSeedState(now),
+    currentUserId: null,
+    sessionRestored: false,
+    donationLoadError: null,
+    now,
+  }
 }
 
 interface FoodLoopContextValue {
@@ -231,6 +244,37 @@ const FoodLoopContext = createContext<FoodLoopContextValue | null>(null)
 
 export function FoodLoopProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, init)
+
+  useEffect(() => {
+    const userId = window.localStorage.getItem('foodloop-user-id')
+    dispatch({ type: 'RESTORE_SESSION', userId })
+  }, [])
+
+  useEffect(() => {
+    if (!state.sessionRestored) return
+    if (state.currentUserId) window.localStorage.setItem('foodloop-user-id', state.currentUserId)
+    else window.localStorage.removeItem('foodloop-user-id')
+  }, [state.currentUserId, state.sessionRestored])
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/donations', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Could not load listings (${response.status})`)
+        return (await response.json()) as ApiDonation[]
+      })
+      .then((records) => {
+        if (active) dispatch({ type: 'SYNC_DONATIONS', donations: records.map(toDonation) })
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        const message = error instanceof Error ? error.message : 'Could not load saved listings'
+        dispatch({ type: 'DONATION_LOAD_ERROR', message })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => dispatch({ type: 'TICK', now: Date.now() }), 30_000)
@@ -253,6 +297,57 @@ export function FoodLoopProvider({ children }: { children: ReactNode }) {
   )
 
   return <FoodLoopContext.Provider value={value}>{children}</FoodLoopContext.Provider>
+}
+
+export interface ApiDonation {
+  id: string
+  donorId: string
+  foodName: string
+  quantity: number
+  category: Donation['category']
+  diet: Donation['diet']
+  storage: Donation['storage']
+  placeId: string
+  pickupDeadline: string
+  notes?: string
+  status: DonationStatus
+  createdAt: string
+  matchedRequirementId?: string
+  declinedRequirementIds?: string[]
+  acceptorId?: string
+  volunteerId?: string
+  rejectionReason?: string
+}
+
+export function toDonation(record: ApiDonation): Donation {
+  const statuses: DonationStatus[] =
+    record.status === 'rejected'
+      ? ['posted', 'rejected']
+      : ['posted', 'approved', 'claimed', 'assigned', 'picked_up', 'delivered', 'completed']
+  const statusIndex = statuses.indexOf(record.status)
+  return {
+    id: record.id,
+    donorId: record.donorId,
+    foodName: record.foodName,
+    quantity: record.quantity,
+    category: record.category,
+    diet: record.diet,
+    storage: record.storage,
+    location: getPlace(record.placeId),
+    pickupDeadline: record.pickupDeadline,
+    notes: record.notes,
+    status: record.status,
+    createdAt: record.createdAt,
+    history: statuses.slice(0, Math.max(statusIndex + 1, 1)).map((status) => ({
+      status,
+      at: record.createdAt,
+    })),
+    matchedRequirementId: record.matchedRequirementId,
+    declinedRequirementIds: record.declinedRequirementIds ?? [],
+    acceptorId: record.acceptorId,
+    volunteerId: record.volunteerId,
+    rejectionReason: record.rejectionReason,
+  }
 }
 
 export function useFoodLoop() {

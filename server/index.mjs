@@ -1,21 +1,21 @@
-// Minimal in-memory REST API for FoodLoop. Run with: pnpm api  (http://localhost:4000)
-// Data is loaded from data/foodloop-seed.json and reset on every restart; no database or auth.
+// FoodLoop REST API. Run with: pnpm api (http://localhost:4000)
+import dotenv from 'dotenv'
 import express from 'express'
-import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import {
+  closeDatabases,
+  connectDatabases,
+  createDonation,
+  createReview,
+  deleteDonation,
+  getDonation,
+  getDonations,
+  getRequirements,
+  getUsers,
+  updateDonation,
+} from './database.mjs'
 
-const seed = JSON.parse(readFileSync(new URL('../data/foodloop-seed.json', import.meta.url), 'utf8'))
-
-const db = {
-  users: seed.users.map(({ password, ...u }) => u),
-  donations: seed.donations.map(({ deadlineInHours, createdHoursAgo, ...d }) => ({
-    ...d,
-    pickupDeadline: new Date(Date.now() + deadlineInHours * 3_600_000).toISOString(),
-    createdAt: new Date(Date.now() - createdHoursAgo * 3_600_000).toISOString(),
-  })),
-  requirements: seed.requirements,
-  reviews: seed.reviews,
-}
+dotenv.config({ path: ['.env.local', '.env'] })
 
 const WORKFLOW = ['posted', 'approved', 'claimed', 'assigned', 'picked_up', 'delivered', 'completed']
 const CATEGORIES = ['cooked', 'bakery', 'produce', 'dairy', 'packaged']
@@ -40,27 +40,23 @@ function validateDonation(body, partial = false) {
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 // List donations with optional ?status=&category=&donorId= filters
-app.get('/api/donations', (req, res) => {
+app.get('/api/donations', async (req, res) => {
   const { status, category, donorId } = req.query
-  res.json(
-    db.donations.filter(
-      (d) =>
-        (!status || d.status === status) &&
-        (!category || d.category === category) &&
-        (!donorId || d.donorId === donorId),
-    ),
+  const filters = Object.fromEntries(
+    Object.entries({ status, category, donorId }).filter(([, value]) => typeof value === 'string'),
   )
+  res.json(await getDonations(filters))
 })
 
-app.get('/api/donations/:id', (req, res) => {
-  const donation = db.donations.find((d) => d.id === req.params.id)
+app.get('/api/donations/:id', async (req, res) => {
+  const donation = await getDonation(req.params.id)
   if (!donation) return res.status(404).json({ error: 'Donation not found' })
   res.json(donation)
 })
 
-app.post('/api/donations', (req, res) => {
+app.post('/api/donations', async (req, res) => {
   const errors = validateDonation(req.body)
-  if (!db.users.some((u) => u.id === req.body.donorId && u.role === 'donor')) errors.push('donorId must reference a donor')
+  if (!(await getUsers('donor')).some((u) => u.id === req.body.donorId)) errors.push('donorId must reference a donor')
   if (errors.length) return res.status(400).json({ errors })
   const { donorId, foodName, quantity, category, diet = 'veg', storage = 'room', placeId, pickupDeadline, notes } = req.body
   const donation = {
@@ -77,59 +73,71 @@ app.post('/api/donations', (req, res) => {
     status: 'posted',
     createdAt: new Date().toISOString(),
   }
-  db.donations.unshift(donation)
+  await createDonation(donation)
   res.status(201).json(donation)
 })
 
-app.patch('/api/donations/:id', (req, res) => {
-  const donation = db.donations.find((d) => d.id === req.params.id)
+app.patch('/api/donations/:id', async (req, res) => {
+  const donation = await getDonation(req.params.id)
   if (!donation) return res.status(404).json({ error: 'Donation not found' })
   if (donation.status !== 'posted') return res.status(409).json({ error: 'Only posted listings can be edited' })
   const errors = validateDonation(req.body, true)
   if (errors.length) return res.status(400).json({ errors })
-  for (const key of ['foodName', 'quantity', 'category', 'diet', 'storage', 'placeId', 'pickupDeadline', 'notes'])
-    if (req.body[key] !== undefined) donation[key] = req.body[key]
-  res.json(donation)
+  const changes = Object.fromEntries(
+    ['foodName', 'quantity', 'category', 'diet', 'storage', 'placeId', 'pickupDeadline', 'notes']
+      .filter((key) => req.body[key] !== undefined)
+      .map((key) => [key, req.body[key]]),
+  )
+  if (!(await updateDonation(req.params.id, changes, 'posted')))
+    return res.status(409).json({ error: 'Only posted listings can be edited' })
+  res.json({ ...donation, ...changes })
 })
 
 // Move a donation one step along the workflow (or reject it from "posted")
-app.patch('/api/donations/:id/status', (req, res) => {
-  const donation = db.donations.find((d) => d.id === req.params.id)
+app.patch('/api/donations/:id/status', async (req, res) => {
+  const donation = await getDonation(req.params.id)
   if (!donation) return res.status(404).json({ error: 'Donation not found' })
   const { status, acceptorId, volunteerId, reason } = req.body
   if (status === 'rejected') {
     if (donation.status !== 'posted') return res.status(409).json({ error: 'Only posted listings can be rejected' })
-    Object.assign(donation, { status, rejectionReason: String(reason ?? '').slice(0, 200) })
-    return res.json(donation)
+    const changes = { status, rejectionReason: String(reason ?? '').slice(0, 200) }
+    if (!(await updateDonation(req.params.id, changes, 'posted')))
+      return res.status(409).json({ error: 'Only posted listings can be rejected' })
+    return res.json({ ...donation, ...changes })
   }
   const expected = WORKFLOW[WORKFLOW.indexOf(donation.status) + 1]
   if (status !== expected)
     return res.status(409).json({ error: `Invalid transition ${donation.status} → ${status}; expected ${expected}` })
   if (status === 'claimed') {
-    if (!db.users.some((u) => u.id === acceptorId && u.role === 'acceptor')) return res.status(400).json({ error: 'acceptorId required' })
-    donation.acceptorId = acceptorId
+    if (!(await getUsers('acceptor')).some((u) => u.id === acceptorId)) return res.status(400).json({ error: 'acceptorId required' })
   }
   if (status === 'assigned') {
-    if (!db.users.some((u) => u.id === volunteerId && u.role === 'volunteer')) return res.status(400).json({ error: 'volunteerId required' })
-    donation.volunteerId = volunteerId
+    if (!(await getUsers('volunteer')).some((u) => u.id === volunteerId)) return res.status(400).json({ error: 'volunteerId required' })
   }
-  donation.status = status
-  res.json(donation)
+  const changes = {
+    status,
+    ...(status === 'claimed' && { acceptorId }),
+    ...(status === 'assigned' && { volunteerId }),
+  }
+  if (!(await updateDonation(req.params.id, changes, donation.status)))
+    return res.status(409).json({ error: 'Donation status changed; reload and try again' })
+  res.json({ ...donation, ...changes })
 })
 
-app.delete('/api/donations/:id', (req, res) => {
-  const index = db.donations.findIndex((d) => d.id === req.params.id)
-  if (index === -1) return res.status(404).json({ error: 'Donation not found' })
-  db.donations.splice(index, 1)
+app.delete('/api/donations/:id', async (req, res) => {
+  if (!(await deleteDonation(req.params.id))) return res.status(404).json({ error: 'Donation not found' })
   res.status(204).end()
 })
 
-app.get('/api/requirements', (_req, res) => res.json(db.requirements))
-app.get('/api/users', (req, res) => res.json(db.users.filter((u) => !req.query.role || u.role === req.query.role)))
+app.get('/api/requirements', async (_req, res) => res.json(await getRequirements()))
+app.get('/api/users', async (req, res) => {
+  const role = typeof req.query.role === 'string' ? req.query.role : undefined
+  res.json(await getUsers(role))
+})
 
-app.post('/api/reviews', (req, res) => {
+app.post('/api/reviews', async (req, res) => {
   const { donationId, rating, comment = '' } = req.body
-  const donation = db.donations.find((d) => d.id === donationId)
+  const donation = await getDonation(donationId)
   if (!donation) return res.status(404).json({ error: 'Donation not found' })
   if (donation.status !== 'delivered') return res.status(409).json({ error: 'Donation must be delivered before review' })
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' })
@@ -142,12 +150,33 @@ app.post('/api/reviews', (req, res) => {
     comment: String(comment).slice(0, 500),
     createdAt: new Date().toISOString(),
   }
-  db.reviews.unshift(review)
-  donation.status = 'completed'
+  if (!(await updateDonation(donationId, { status: 'completed' }, 'delivered')))
+    return res.status(409).json({ error: 'Donation status changed; reload and try again' })
+  try {
+    await createReview(review)
+  } catch (error) {
+    await updateDonation(donationId, { status: 'delivered' }, 'completed')
+    throw error
+  }
   res.status(201).json(review)
 })
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }))
 
+app.use((error, _req, res, _next) => {
+  console.error('FoodLoop API error:', error)
+  res.status(500).json({ error: 'Internal server error' })
+})
+
 const port = Number(process.env.PORT) || 4000
-app.listen(port, () => console.log(`FoodLoop API listening on http://localhost:${port}`))
+await connectDatabases()
+const server = app.listen(port, () => console.log(`FoodLoop API listening on http://localhost:${port}`))
+
+async function shutdown() {
+  server.close(async () => {
+    await closeDatabases()
+  })
+}
+
+process.once('SIGINT', shutdown)
+process.once('SIGTERM', shutdown)

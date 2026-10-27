@@ -67,6 +67,11 @@ export function DonorDashboard() {
       </StatGrid>
 
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="gap-4">
+        {state.donationLoadError && (
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            Saved listings could not be loaded: {state.donationLoadError}
+          </p>
+        )}
         <TabsList className="w-full sm:w-fit">
           <TabsTrigger value="listings">My listings</TabsTrigger>
           <TabsTrigger value="post">Post food</TabsTrigger>

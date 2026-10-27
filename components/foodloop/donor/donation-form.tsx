@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { getPlace, PLACES } from '@/lib/foodloop/places'
-import { useFoodLoop } from '@/lib/foodloop/store'
+import { PLACES } from '@/lib/foodloop/places'
+import { toDonation, useFoodLoop, type ApiDonation } from '@/lib/foodloop/store'
 import type { DonationDiet, FoodCategory, StorageCondition } from '@/lib/foodloop/types'
 import {
   CATEGORY_LABEL,
@@ -28,10 +28,13 @@ export function DonationForm({ onPosted }: { onPosted: () => void }) {
   const [deadline, setDeadline] = useState(() => toLocalInputValue(state.now + 4 * 3_600_000))
   const [notes, setNotes] = useState('')
   const [errors, setErrors] = useState<Errors>({})
+  const [submitError, setSubmitError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!currentUser) return null
+  const donorId = currentUser.id
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const next: Errors = {}
     const qty = Number(quantity)
@@ -44,21 +47,37 @@ export function DonationForm({ onPosted }: { onPosted: () => void }) {
     setErrors(next)
     if (Object.keys(next).length > 0) return
 
-    dispatch({
-      type: 'ADD_DONATION',
-      donation: {
-        donorId: currentUser!.id,
-        foodName: foodName.trim().slice(0, 100),
-        quantity: qty,
-        category,
-        diet,
-        storage,
-        location: getPlace(placeId),
-        pickupDeadline: new Date(deadlineMs).toISOString(),
-        notes: notes.trim().slice(0, 300) || undefined,
-      },
-    })
-    onPosted()
+    setSubmitError('')
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/donations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          donorId,
+          foodName: foodName.trim().slice(0, 100),
+          quantity: qty,
+          category,
+          diet,
+          storage,
+          placeId,
+          pickupDeadline: new Date(deadlineMs).toISOString(),
+          notes: notes.trim().slice(0, 300) || undefined,
+        }),
+      })
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string; errors?: string[] }
+        throw new Error(result.errors?.join(', ') || result.error || `Could not save listing (${response.status})`)
+      }
+
+      const donation = (await response.json()) as ApiDonation
+      dispatch({ type: 'SYNC_DONATIONS', donations: [toDonation(donation)] })
+      onPosted()
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Could not save listing. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -155,8 +174,9 @@ export function DonationForm({ onPosted }: { onPosted: () => void }) {
         />
       </Field>
       <div className="flex justify-end sm:col-span-2">
-        <Button type="submit" size="lg">
-          Post listing
+        {submitError && <p role="alert" className="mr-auto self-center text-sm text-destructive">{submitError}</p>}
+        <Button type="submit" size="lg" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving…' : 'Post listing'}
         </Button>
       </div>
     </form>
