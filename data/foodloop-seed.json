@@ -1,0 +1,40 @@
+{
+  "users": [
+    { "id": "u-donor-1", "role": "donor", "name": "Arun Mehta", "org": "Spice Route Restaurant", "email": "arun@spiceroute.in", "password": "donor123", "placeId": "indiranagar" },
+    { "id": "u-donor-2", "role": "donor", "name": "Sara D'Souza", "org": "The Grand Orchid Hotel", "email": "sara@grandorchid.in", "password": "donor123", "placeId": "mg-road" },
+    { "id": "u-donor-3", "role": "donor", "name": "Kiran Rao", "org": "Daily Bread Bakery", "email": "kiran@dailybread.in", "password": "donor123", "placeId": "koramangala" },
+    { "id": "u-acc-1", "role": "acceptor", "name": "Meera Iyer", "org": "Annapurna Food NGO", "email": "meera@annapurna.org", "password": "ngo123", "placeId": "jayanagar" },
+    { "id": "u-acc-2", "role": "acceptor", "name": "Joseph Thomas", "org": "Little Stars Orphanage", "email": "joseph@littlestars.org", "password": "ngo123", "placeId": "hsr-layout" },
+    { "id": "u-acc-3", "role": "acceptor", "name": "Fatima Khan", "org": "Hope Night Shelter", "email": "fatima@hopeshelter.org", "password": "ngo123", "placeId": "hebbal" },
+    { "id": "u-admin-1", "role": "admin", "name": "Nisha Verma", "org": "FoodLoop Operations", "email": "admin@foodloop.org", "password": "admin123", "placeId": "mg-road" },
+    { "id": "u-vol-1", "role": "volunteer", "name": "Ravi Kumar", "org": "FoodLoop Volunteers", "email": "ravi@foodloop.org", "password": "volunteer123", "placeId": "koramangala", "vehicle": "Scooter", "available": true, "completedDeliveries": 42, "rating": 4.8 },
+    { "id": "u-vol-2", "role": "volunteer", "name": "Priya Nair", "org": "FoodLoop Volunteers", "email": "priya@foodloop.org", "password": "volunteer123", "placeId": "indiranagar", "vehicle": "Hatchback car", "available": true, "completedDeliveries": 27, "rating": 4.9 },
+    { "id": "u-vol-3", "role": "volunteer", "name": "Arjun Shetty", "org": "FoodLoop Volunteers", "email": "arjun@foodloop.org", "password": "volunteer123", "placeId": "malleshwaram", "vehicle": "Bicycle", "available": false, "completedDeliveries": 11, "rating": 4.6 }
+  ],
+  "donations": [
+    { "id": "d-101", "donorId": "u-donor-1", "foodName": "Veg biryani & raita", "quantity": 60, "category": "cooked", "diet": "veg", "storage": "hot", "placeId": "indiranagar", "deadlineInHours": 1.5, "createdHoursAgo": 1, "status": "posted", "notes": "Packed in sealed foil trays." },
+    { "id": "d-102", "donorId": "u-donor-3", "foodName": "Assorted bread loaves", "quantity": 40, "category": "bakery", "diet": "vegan", "storage": "room_temp", "placeId": "koramangala", "deadlineInHours": 10, "createdHoursAgo": 2, "status": "posted" },
+    { "id": "d-103", "donorId": "u-donor-2", "foodName": "Buffet paneer curry & rice", "quantity": 80, "category": "cooked", "diet": "veg", "storage": "refrigerated", "placeId": "mg-road", "deadlineInHours": 5, "createdHoursAgo": 3, "status": "approved", "matchedRequirementId": "r-201" },
+    { "id": "d-104", "donorId": "u-donor-1", "foodName": "Chicken curry & chapati", "quantity": 35, "category": "cooked", "diet": "non_veg", "storage": "hot", "placeId": "indiranagar", "deadlineInHours": 3, "createdHoursAgo": 4, "status": "claimed", "matchedRequirementId": "r-203", "acceptorId": "u-acc-3" },
+    { "id": "d-105", "donorId": "u-donor-2", "foodName": "Fresh fruit platters", "quantity": 50, "category": "produce", "diet": "vegan", "storage": "refrigerated", "placeId": "mg-road", "deadlineInHours": 7, "createdHoursAgo": 5, "status": "assigned", "matchedRequirementId": "r-204", "acceptorId": "u-acc-2", "volunteerId": "u-vol-2" },
+    { "id": "d-106", "donorId": "u-donor-3", "foodName": "Croissants & muffins", "quantity": 45, "category": "bakery", "diet": "veg", "storage": "room_temp", "placeId": "koramangala", "deadlineInHours": 4, "createdHoursAgo": 6, "status": "picked_up", "matchedRequirementId": "r-205", "acceptorId": "u-acc-1", "volunteerId": "u-vol-1" },
+    { "id": "d-107", "donorId": "u-donor-1", "foodName": "Dal makhani & jeera rice", "quantity": 70, "category": "cooked", "diet": "veg", "storage": "hot", "placeId": "indiranagar", "deadlineInHours": 2.5, "createdHoursAgo": 8, "status": "delivered", "matchedRequirementId": "r-206", "acceptorId": "u-acc-2", "volunteerId": "u-vol-1" },
+    { "id": "d-108", "donorId": "u-donor-2", "foodName": "Yogurt cups & milk packs", "quantity": 100, "category": "dairy", "diet": "veg", "storage": "refrigerated", "placeId": "mg-road", "deadlineInHours": -20, "createdHoursAgo": 30, "status": "completed", "matchedRequirementId": "r-207", "acceptorId": "u-acc-1", "volunteerId": "u-vol-2" },
+    { "id": "d-109", "donorId": "u-donor-1", "foodName": "Mixed veg pulao", "quantity": 55, "category": "cooked", "diet": "veg", "storage": "hot", "placeId": "indiranagar", "deadlineInHours": -44, "createdHoursAgo": 52, "status": "completed", "matchedRequirementId": "r-208", "acceptorId": "u-acc-3", "volunteerId": "u-vol-1" },
+    { "id": "d-110", "donorId": "u-donor-3", "foodName": "Day-old cream pastries", "quantity": 20, "category": "bakery", "diet": "veg", "storage": "room_temp", "placeId": "koramangala", "deadlineInHours": 6, "createdHoursAgo": 9, "status": "rejected", "rejectionReason": "Cream-based items unsafe without refrigeration." }
+  ],
+  "requirements": [
+    { "id": "r-201", "acceptorId": "u-acc-1", "title": "Evening meal for community kitchen", "meals": 75, "diet": "veg", "categories": ["cooked"], "transportAvailable": false, "neededInHours": 6, "createdHoursAgo": 5, "status": "matched" },
+    { "id": "r-202", "acceptorId": "u-acc-2", "title": "Breakfast for 40 children", "meals": 40, "diet": "veg", "categories": ["bakery", "dairy", "produce"], "transportAvailable": true, "neededInHours": 14, "createdHoursAgo": 3, "status": "open" },
+    { "id": "r-203", "acceptorId": "u-acc-3", "title": "Dinner for shelter residents", "meals": 35, "diet": "any", "categories": ["cooked"], "transportAvailable": false, "neededInHours": 4, "createdHoursAgo": 6, "status": "matched" },
+    { "id": "r-204", "acceptorId": "u-acc-2", "title": "Fruit snacks for afternoon", "meals": 50, "diet": "any", "categories": ["produce"], "transportAvailable": false, "neededInHours": 8, "createdHoursAgo": 7, "status": "matched" },
+    { "id": "r-205", "acceptorId": "u-acc-1", "title": "Tea-time snacks for elders", "meals": 40, "diet": "veg", "categories": ["bakery"], "transportAvailable": false, "neededInHours": 5, "createdHoursAgo": 8, "status": "matched" },
+    { "id": "r-206", "acceptorId": "u-acc-2", "title": "Lunch for children's home", "meals": 60, "diet": "veg", "categories": ["cooked"], "transportAvailable": true, "neededInHours": 3, "createdHoursAgo": 10, "status": "matched" },
+    { "id": "r-207", "acceptorId": "u-acc-1", "title": "Dairy for nutrition program", "meals": 100, "diet": "veg", "categories": ["dairy"], "transportAvailable": false, "neededInHours": -18, "createdHoursAgo": 32, "status": "fulfilled" },
+    { "id": "r-208", "acceptorId": "u-acc-3", "title": "Weekend dinner drive", "meals": 50, "diet": "any", "categories": [], "transportAvailable": false, "neededInHours": -40, "createdHoursAgo": 54, "status": "fulfilled" }
+  ],
+  "reviews": [
+    { "id": "rv-1", "donationId": "d-108", "donorId": "u-donor-2", "acceptorId": "u-acc-1", "rating": 5, "comment": "Perfectly chilled and well within expiry. The kids loved it!", "createdHoursAgo": 18 },
+    { "id": "rv-2", "donationId": "d-109", "donorId": "u-donor-1", "acceptorId": "u-acc-3", "rating": 4, "comment": "Tasty and warm. Slightly fewer portions than listed, but much appreciated.", "createdHoursAgo": 40 }
+  ]
+}
